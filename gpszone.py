@@ -2,33 +2,36 @@
 # -*- coding: utf-8 -*-
 import xml.etree.ElementTree as XML
 import re
+import os
+from queue import Queue
+from threading import Thread
 
-poly = [ \
-    [68.800654, 16.576373], \
-    [68.809768, 16.562307], \
-    [68.816986, 16.590603], \
-    [68.817223, 16.647194], \
-    [68.804857, 16.699206], \
-    [68.796391, 16.671728], \
-    [68.804738, 16.637708], \
-    [68.805034, 16.602870]  \
-]
+serialqueue = Queue(maxsize=0)
+
 def handle_KML():
-    e = XML.parse('testrute.kml')
-    root = e.getroot()
-    for i in root.iter():
-        m = re.match(".*({.*}).*", str(i))
-        if m:
-            xmlns = m.group(1)
-            break
-    for coord in root.iter(xmlns + 'coordinates'):
-        for c in coord.text.split(' '):
-            c = c.replace('\t', '')
-            print(c)
-            print("HEHE")
-            x = c.split(',')[0]
-            y = c.split(',')[0]
-            print(x)
+    area = []
+    xmlns = ''
+    n = 0
+    for kmlfile in os.listdir("."):
+        if(kmlfile.endswith(".kml")):
+            e = XML.parse(kmlfile)
+            root = e.getroot()
+            for i in root.iter():
+                m = re.match(".*({.*}).*", str(i))
+                if m:
+                    xmlns = m.group(1)
+                    break
+            for coord in root.iter(xmlns + 'coordinates'):
+                area.append([])
+                for c in coord.text.split(' '):
+                    c = c.replace('\t', '')
+                    c = c.replace('\n', '')
+                    if(re.match('\d+\..*,\d+\..*', c)):
+                        x = c.split(',')[0]
+                        y = c.split(',')[1]
+                        area[n].insert(n, [x,y])
+                n = n + 1
+    return area
 
 def point_inside_polygon(x,y,poly):
     n = len(poly)
@@ -46,14 +49,16 @@ def point_inside_polygon(x,y,poly):
         p1x,p1y = p2x,p2y
     return inside
 
-def sjekkp(x,y,poly):
-    if(point_inside_polygon(x,y,poly)):
-        print(x,y,"INNE")
-    else:
-        print(x,y,"UTE")
+def serialhandle():
+    import serial
+    ser = serial.Serial("com6", 4800)
+    while(True):
+        line = ser.readline()
+        if(re.match("^$GPGGA")):
+            print(line)
 
-sjekkp(68.802963, 16.633619,poly)
-sjekkp(68.797516, 16.671237,poly)
-sjekkp(68.816340, 16.591314,poly)
-sjekkp(68.813265, 16.163565,poly)
-handle_KML()
+Thread(serialhandle())
+area = handle_KML()
+while(True):
+    for l in area:
+        print(l)
