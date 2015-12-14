@@ -11,14 +11,26 @@ from time import sleep
 import RPi.GPIO as GPIO
 
 serialqueue = Queue(maxsize=0)
+servicequeue = Queue(maxsize=0)
+
+greenled = 20
+orangeled = 12
+button = 27
+relay = 18
+GPIO.setmode(GPIO.BCM)
+GPIO.setwarnings(False)
+GPIO.setup(greenled, GPIO.OUT) 
+GPIO.setup(orangeled, GPIO.OUT)
+GPIO.setup(button, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.setup(relay, GPIO.OUT)
 
 def handle_KML():
     area = []
     xmlns = ''
     n = 0
-    for kmlfile in os.listdir("."):
+    for kmlfile in os.listdir("/boot/RUTER/"):
         if(kmlfile.endswith(".kml")):
-            e = XML.parse(kmlfile)
+            e = XML.parse("/boot/RUTER/" + kmlfile)
             root = e.getroot()
             for i in root.iter():
                 m = re.match(".*({.*}).*", str(i))
@@ -69,41 +81,48 @@ def ggatodd(gga):
         y = -y
     if(xdir == 'W'):
         x = -x
+    print(x,y)
     return(x,y)
 
 def serialhandle():
     ser = serial.Serial("/dev/ttyUSB0", 4800)
     while(True):
+        while not servicequeue.empty():
+            if serialqueue.get() == "stopserial":
+                break
         line = ser.readline()
         line = line.decode("ISO-8859-1")
         if(re.match("^.GPGGA", line)):
             serialqueue.put(ggatodd(line))
+            GPIO.output(greenled, GPIO.LOW)
+            sleep(.1)
+            GPIO.output(greenled, GPIO. HIGH)
         sleep(.2)
 
 def main():
-    GPIO.setmode(GPIO.BCM)
-    GPIO.setwarnings(False)
-    GPIO.setup(4, GPIO.OUT) #led
-    GPIO.output(4, GPIO.HIGH)
-    sleep(.2)
-    GPIO.output(4, GPIO.LOW)
-    sleep(.2)
-    GPIO.output(4, GPIO.HIGH)
-    sleep(.2)
-    GPIO.output(4, GPIO.LOW)
-    sleep(.2)
     area = handle_KML()
     x = 0
     y = 0
+    GPIO.output(greenled, GPIO.HIGH)
     while(True):
+        inside = False
         while not serialqueue.empty():
             x,y = serialqueue.get()
         for l in area:
             if(point_inside_polygon(x,y,l)):
-                GPIO.output(4, GPIO.HIGH)
-            else:
-                GPIO.output(4, GPIO.LOW)
+                inside = True
+        if inside:
+            GPIO.output(orangeled, GPIO.HIGH)
+            GPIO.output(relay, GPIO.HIGH)
+            #print("INNE")
+        else:
+            GPIO.output(orangeled, GPIO.LOW)
+            GPIO.output(relay, GPIO.LOW)
+            #print("UTE")
+        #print(x,y)
         sleep(.1)
+
+
 
 mainthread = Thread(target=main)
 serialthread = Thread(target=serialhandle)
